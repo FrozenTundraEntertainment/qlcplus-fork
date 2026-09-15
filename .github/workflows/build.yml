@@ -17,11 +17,13 @@ jobs:
       CI_PULL_REQUEST: ${{ github.event.number }}
       CC: gcc
       CXX: g++
-      PACKAGES_BASE:
+      env:
+      PACKAGES_BASE: >-
         gdb
         libasound2-dev
         libusb-1.0-0-dev
         libftdi1-dev
+        pkg-config
         shared-mime-info
         libudev-dev
         libmad0-dev
