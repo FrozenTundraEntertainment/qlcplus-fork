@@ -110,6 +110,10 @@ jobs:
           dir: ${{ env.QT_INSTALL_DIR }}
           modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
 
+      - name: Restore System PKG_CONFIG_PATH
+        run: |
+          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH}" >> $GITHUB_ENV
+
       - name: Install python-lxml for fixtures-tool # with the now-registered aqt python
         run: pip install lxml
 
