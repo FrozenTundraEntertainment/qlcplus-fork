@@ -123,6 +123,7 @@ jobs:
           key: ${{ github.job }}-${{ matrix.task }}
 
       - name: Setup ruby cache
+        if: ${{ startsWith(matrix.task, 'coverage') }}
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '2.7'
