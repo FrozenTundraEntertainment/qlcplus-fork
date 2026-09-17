@@ -48,15 +48,30 @@ jobs:
             echo "QT_VERSION=6.10.2" | tee -a $GITHUB_ENV
           fi
 
-      - name: Download, cache and install packages
-        uses: awalsh128/cache-apt-pkgs-action@v1.6.3
-        with:
-          version: ${{runner.os}}-apt
-          packages: |
-            gdb libasound2-dev libusb-1.0-0-dev libftdi1-dev pkg-config \
-            shared-mime-info libudev-dev libmad0-dev libsndfile1-dev \
-            liblo-dev libfftw3-dev libgl1-mesa-dev libxml2-utils \
-            xvfb chrpath libfuse2 wget libpulse-dev lcov ninja-build
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gdb \
+            libasound2-dev \
+            libusb-1.0-0-dev \
+            libftdi1-dev \
+            pkg-config \
+            shared-mime-info \
+            libudev-dev \
+            libmad0-dev \
+            libsndfile1-dev \
+            liblo-dev \
+            libfftw3-dev \
+            libgl1-mesa-dev \
+            libxml2-utils \
+            xvfb \
+            chrpath \
+            libfuse2 \
+            wget \
+            libpulse-dev \
+            lcov \
+            ninja-build
 
       - name: Install Qt through aqt (and python)
         uses: jurplel/install-qt-action@v4
