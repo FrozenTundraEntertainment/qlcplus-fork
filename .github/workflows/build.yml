@@ -89,12 +89,6 @@ jobs:
         if: ${{ startsWith( matrix.task, 'coverage') }}
         run: sudo gem install coveralls-lcov
 
-      - name: Update Version Header
-        run: |
-          sed -i "s/\(#define APPVERSION \".*\)\"/\1 ${{ env.GIT_REV }}\"/" engine/src/qlcconfig.h
-          APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' engine/src/qlcconfig.h)
-          echo "APPVERSION=${APPVERSION}" >> $GITHUB_ENV
-
       - name: Configure CMake (v4)
         if: matrix.task == 'build-v4'
         run: |
@@ -125,6 +119,12 @@ jobs:
             -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}/lib/cmake" \
             -Dcoverage=ON \
             -DINSTALL_ROOT="${INSTALL_ROOT}"
+
+      - name: Update Version Header
+        run: |
+          sed -i "s/\(#define APPVERSION \".*\)\"/\1 ${{ env.GIT_REV }}\"/" engine/src/qlcconfig.h
+          APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' engine/src/qlcconfig.h)
+          echo "APPVERSION=${APPVERSION}" >> $GITHUB_ENV
 
       - name: Build
         run: cmake --build build --parallel
@@ -286,11 +286,6 @@ jobs:
           fi
           echo "OUTFILE=${OUTFILE}" >> "$GITHUB_ENV"
 
-          # Versioning
-          sed -i "s/\(#define APPVERSION \".*\)\"/\1 ${GIT_REV}\"/" engine/src/qlcconfig.h
-          APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' engine/src/qlcconfig.h)
-          echo "APPVERSION=${APPVERSION}" >> "$GITHUB_ENV"
-
           # Fix release mode & disable problematic plugins
           sed -i -e 's/Debug/Release/g' CMakeLists.txt
           sed -i -e 's/add_subdirectory(velleman)/# add_subdirectory(velleman)/g' plugins/CMakeLists.txt
@@ -299,7 +294,8 @@ jobs:
           WORKSPACE_WIN=$(cygpath -w "${GITHUB_WORKSPACE}" | sed 's/\\/\\\\/g')
           sed -i "s|c:\\\\projects|${WORKSPACE_WIN}|gI" platforms/windows/*.nsi
 
-      - name: Configure & Build
+
+      - name: Configure CMake
         shell: msys2 {0}
         run: |
           EXTRA_ARGS=""
@@ -314,6 +310,16 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             ${EXTRA_ARGS}
 
+      - name: Update Version Header
+        shell: msys2 {0}
+        run: |
+          sed -i "s/\(#define APPVERSION \".*\)\"/\1 ${GIT_REV}\"/" engine/src/qlcconfig.h
+          APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' engine/src/qlcconfig.h)
+          echo "APPVERSION=${APPVERSION}" >> "$GITHUB_ENV"
+
+      - name: Build & Install
+        shell: msys2 {0}
+        run: |
           cmake --build build --parallel
           cmake --build build --target install
 
