@@ -10,7 +10,7 @@ jobs:
   build-linux:
     #if: false
     runs-on: ubuntu-22.04
-    name: QLCplus Linux ${{matrix.task}}
+    name: QLCplus Linux ${{ matrix.task }}
     strategy:
       #fail-fast: false
       matrix:
@@ -78,14 +78,14 @@ jobs:
         with:
           version: ${{ env.QT_VERSION }}
           cache: true
-          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+          modules: "qt3d qtimageformats qtmultimedia qtserialport qtwebsockets"
 
       - name: Restore System PKG_CONFIG_PATH
         run: |
           echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH}" >> $GITHUB_ENV
 
-      - name: Install python-lxml for fixtures-tool # with the now-registered aqt python
-        run: pip install lxml
+      - name: Install python-lxml for fixtures-tool
+        run: pip install --no-cache-dir lxml
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2.23
@@ -94,14 +94,14 @@ jobs:
           restore-keys: ${{ github.job }}-${{ matrix.task }}-
 
       - name: Setup Ruby for Coverage
-        if: ${{ startsWith(matrix.task, 'coverage') }}
+        if: startsWith(matrix.task, 'coverage')
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.1'
+          ruby-version: "3.1"
           bundler-cache: true
 
       - name: Install coveralls-lcov
-        if: ${{ startsWith( matrix.task, 'coverage') }}
+        if: startsWith(matrix.task, 'coverage')
         run: sudo gem install coveralls-lcov
 
       - name: Configure CMake (v4)
@@ -219,7 +219,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
-    name: QLCplus Windows ${{matrix.task}}
+    name: QLCplus Windows ${{ matrix.task }}
     strategy:
       fail-fast: false
       matrix:
@@ -243,11 +243,11 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
-          host: 'windows'
-          target: 'desktop'
-          arch: 'win64_mingw'
+          host: "windows"
+          target: "desktop"
+          arch: "win64_mingw"
           dir: "${{ github.workspace }}/qt/"
-          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+          modules: "qt3d qtimageformats qtmultimedia qtserialport qtwebsockets"
 
       - name: Update and install MSYS2 (64bit)
         uses: msys2/setup-msys2@v2
@@ -262,6 +262,7 @@ jobs:
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-gcc-libs
             mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
             mingw-w64-x86_64-libmad
             mingw-w64-x86_64-libsndfile
             mingw-w64-x86_64-flac
@@ -276,7 +277,7 @@ jobs:
           mkdir -p /c/projects/D2XXSDK
           wget https://qlcplus.org/misc/CDM-v2.12.36.20-WHQL-Certified.zip -O /c/projects/D2XXSDK/cdm.zip
           cd /c/projects/D2XXSDK
-          unzip cdm.zip
+          unzip -q cdm.zip
           cd amd64
           gendef.exe - ftd2xx64.dll > ftd2xx.def
           dlltool -k --input-def ftd2xx.def --dllname ftd2xx64.dll --output-lib libftd2xx.a
@@ -294,10 +295,10 @@ jobs:
 
           if [ "${{ matrix.task }}" == "build-v4" ]; then
             echo "NSIS_SCRIPT=qlcplus4Qt6.nsi" >> "$GITHUB_ENV"
-            OUTFILE=$(grep 'OutFile' platforms/windows/qlcplus4Qt6.nsi | cut -d'"' -f 2)
+            OUTFILE=$(grep 'OutFile' platforms/windows/qlcplus4Qt6.nsi | cut -d'"' -f 2 | tr -d '\r')
           else
             echo "NSIS_SCRIPT=qlcplus5Qt6.nsi" >> "$GITHUB_ENV"
-            OUTFILE=$(grep 'OutFile' platforms/windows/qlcplus5Qt6.nsi | cut -d'"' -f 2)
+            OUTFILE=$(grep 'OutFile' platforms/windows/qlcplus5Qt6.nsi | cut -d'"' -f 2 | tr -d '\r')
           fi
           echo "OUTFILE=${OUTFILE}" >> "$GITHUB_ENV"
 
@@ -305,10 +306,18 @@ jobs:
           sed -i -e 's/Debug/Release/g' CMakeLists.txt
           sed -i -e 's/add_subdirectory(velleman)/# add_subdirectory(velleman)/g' plugins/CMakeLists.txt
 
-          # Adapt dynamic paths into NSIS template
-          WORKSPACE_WIN=$(cygpath -w "${GITHUB_WORKSPACE}" | sed 's/\\/\\\\/g')
-          sed -i "s|c:\\\\projects|${WORKSPACE_WIN}|gI" platforms/windows/*.nsi
+          # Fix MSYS2 system path in platforms/windows/CMakeLists.txt
+          MSYS2_ROOT=$(cygpath -m /)
+          sed -i "s|\$ENV{SystemDrive}/msys64|${MSYS2_ROOT}|g" platforms/windows/CMakeLists.txt
+          sed -i "s|C:/msys64|${MSYS2_ROOT}|gI" platforms/windows/CMakeLists.txt
 
+          # Adapt dynamic paths into NSIS template
+          WORKSPACE_WIN=$(cygpath -w "${GITHUB_WORKSPACE}")
+          WORKSPACE_WIN_ESC=$(echo "${WORKSPACE_WIN}" | sed 's/\\/\\\\/g')
+          sed -i "s|c:\\\\projects\\\\qlcplus|${WORKSPACE_WIN_ESC}|gI" platforms/windows/*.nsi
+          sed -i "s|c:/projects/qlcplus|${WORKSPACE_WIN_ESC}|gI" platforms/windows/*.nsi
+          sed -i "s|c:\\\\projects|${WORKSPACE_WIN_ESC}|gI" platforms/windows/*.nsi
+          sed -i "s|c:/projects|${WORKSPACE_WIN_ESC}|gI" platforms/windows/*.nsi
 
       - name: Configure CMake
         shell: msys2 {0}
@@ -329,7 +338,7 @@ jobs:
         shell: msys2 {0}
         run: |
           sed -i "s/\(#define APPVERSION \".*\)\"/\1 ${GIT_REV}\"/" engine/src/qlcconfig.h
-          APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' engine/src/qlcconfig.h)
+          APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' engine/src/qlcconfig.h | tr -d '\r')
           echo "APPVERSION=${APPVERSION}" >> "$GITHUB_ENV"
 
       - name: Build & Install
@@ -344,10 +353,12 @@ jobs:
         run: |
           ./translate.sh release ui
           cp -v *.qm /c/qlcplus/ || true
+          cp -v "${GITHUB_WORKSPACE}/platforms/windows/${{ env.NSIS_SCRIPT }}" /c/qlcplus/ || true
           cd /c/qlcplus
-          "${QT_ROOT_DIR}/bin/windeployqt" qlcplus.exe qlcplusengine.dll qlcplusui.dll qlcpluswebaccess.dll plugins/dmxusb.dll
-          makensis -X'SetCompressor /FINAL lzma' "${GITHUB_WORKSPACE}/platforms/windows/${{ env.NSIS_SCRIPT }}"
-          mv -v "${OUTFILE}" "${GITHUB_WORKSPACE}/${{ matrix.task }}-${{ env.OUTFILE }}"
+          QT_BIN=$(cygpath -u "${QT_ROOT_DIR}/bin")
+          "${QT_BIN}/windeployqt" qlcplus.exe qlcplusengine.dll qlcplusui.dll qlcpluswebaccess.dll plugins/dmxusb.dll
+          makensis -X'SetCompressor /FINAL lzma' "${{ env.NSIS_SCRIPT }}"
+          mv -v "${{ env.OUTFILE }}" "${GITHUB_WORKSPACE}/${{ matrix.task }}-${{ env.OUTFILE }}"
 
       - name: Package Windows Installer (v5)
         shell: msys2 {0}
@@ -355,10 +366,12 @@ jobs:
         run: |
           ./translate.sh release qmlui
           cp -v *.qm /c/qlcplus/ || true
+          cp -v "${GITHUB_WORKSPACE}/platforms/windows/${{ env.NSIS_SCRIPT }}" /c/qlcplus/ || true
           cd /c/qlcplus
-          "${QT_ROOT_DIR}/bin/windeployqt" --qmldir "${GITHUB_WORKSPACE}/qmlui/qml" qlcplus5.exe qlcplusengine.dll plugins/dmxusb.dll
-          makensis -X'SetCompressor /FINAL lzma' "${GITHUB_WORKSPACE}/platforms/windows/${{ env.NSIS_SCRIPT }}"
-          mv -v "${OUTFILE}" "${GITHUB_WORKSPACE}/${{ matrix.task }}-${{ env.OUTFILE }}"
+          QT_BIN=$(cygpath -u "${QT_ROOT_DIR}/bin")
+          "${QT_BIN}/windeployqt" --qmldir "${GITHUB_WORKSPACE}/qmlui/qml" qlcplus5.exe qlcplusengine.dll plugins/dmxusb.dll
+          makensis -X'SetCompressor /FINAL lzma' "${{ env.NSIS_SCRIPT }}"
+          mv -v "${{ env.OUTFILE }}" "${GITHUB_WORKSPACE}/${{ matrix.task }}-${{ env.OUTFILE }}"
 
       - name: Upload Windows Installer
         uses: actions/upload-artifact@v7
@@ -368,7 +381,7 @@ jobs:
 
   build-macos:
     runs-on: macos-15
-    name: QLCplus macOS ${{matrix.task}}
+    name: QLCplus macOS ${{ matrix.task }}
     strategy:
       fail-fast: false
       matrix:
@@ -434,9 +447,9 @@ jobs:
         with:
           version: ${{ env.QT_VERSION }}
           dir: "${{ github.workspace }}/qt/"
-          target: 'desktop'
-          arch: 'clang_64'
-          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+          target: "desktop"
+          arch: "clang_64"
+          modules: "qt3d qtimageformats qtmultimedia qtserialport qtwebsockets"
 
       - name: Import macOS signing certificate
         shell: bash
