@@ -594,10 +594,10 @@ void ContextManager::handleKeyPress(QKeyEvent *e)
                 //m_fixtureManager->deleteFixtureGroups(); // TODO
             break;
             case App::FunctionDragItem:
-                m_functionManager->deleteFunctions(m_functionManager->selectedFunctionsID());
-            break;
             case App::FolderDragItem:
-                m_functionManager->deleteSelectedFolders();
+                // Let the UI ask for confirmation before actually deleting,
+                // like the Functions Manager toolbar delete button does
+                emit requestFunctionsDeletion();
             break;
             case App::ShowDragItem:
             {
@@ -1007,47 +1007,24 @@ void ContextManager::setFixturesPosition(QVector3D position)
     if (m_selectedFixtures.isEmpty())
         return;
 
-    if (m_selectedFixtures.count() == 1)
+    // relative position change
+    for (quint32 &itemID : m_selectedFixtures)
     {
-        quint32 itemID = m_selectedFixtures.first();
         quint32 fxID = FixtureUtils::itemFixtureID(itemID);
         quint16 headIndex = FixtureUtils::itemHeadIndex(itemID);
         quint16 linkedIndex = FixtureUtils::itemLinkedIndex(itemID);
 
         // do not move locked items
         if (m_monProps->fixtureFlags(fxID, headIndex, linkedIndex) & MonitorProperties::LockedFlag)
-            return;
+            continue;
 
         QVector3D currPos = m_monProps->fixturePosition(fxID, headIndex, linkedIndex);
+        QVector3D newPos = currPos + position;
+        Tardis::instance()->enqueueAction(Tardis::FixtureSetPosition, itemID, QVariant(currPos), QVariant(newPos));
 
-        Tardis::instance()->enqueueAction(Tardis::FixtureSetPosition, itemID, QVariant(currPos), QVariant(position));
-
-        // absolute position change
-        m_monProps->setFixturePosition(fxID, headIndex, linkedIndex, position);
+        m_monProps->setFixturePosition(fxID, headIndex, linkedIndex, newPos);
         if (m_3DView->isEnabled())
-            m_3DView->updateFixturePosition(m_selectedFixtures.first(), position);
-    }
-    else
-    {
-        // relative position change
-        for (quint32 &itemID : m_selectedFixtures)
-        {
-            quint32 fxID = FixtureUtils::itemFixtureID(itemID);
-            quint16 headIndex = FixtureUtils::itemHeadIndex(itemID);
-            quint16 linkedIndex = FixtureUtils::itemLinkedIndex(itemID);
-
-            // do not move locked items
-            if (m_monProps->fixtureFlags(fxID, headIndex, linkedIndex) & MonitorProperties::LockedFlag)
-                continue;
-
-            QVector3D currPos = m_monProps->fixturePosition(fxID, headIndex, linkedIndex);
-            QVector3D newPos = currPos + position;
-            Tardis::instance()->enqueueAction(Tardis::FixtureSetPosition, itemID, QVariant(currPos), QVariant(newPos));
-
-            m_monProps->setFixturePosition(fxID, headIndex, linkedIndex, newPos);
-            if (m_3DView->isEnabled())
-                m_3DView->updateFixturePosition(itemID, newPos);
-        }
+            m_3DView->updateFixturePosition(itemID, newPos);
     }
 
     emit fixturesPositionChanged();
@@ -1378,6 +1355,8 @@ void ContextManager::getCurrentColors(QQuickItem *item) const
 {
     int rgbDiffCount = 0;
     int wauvDiffCount = 0;
+    bool rgbFound = false;
+    bool wauvFound = false;
     QColor rgbColor;
     QColor wauvColor;
 
@@ -1409,10 +1388,16 @@ void ContextManager::getCurrentColors(QQuickItem *item) const
                               fixture->channelValueAt(cmyCh.at(2)), 0);
         }
 
-        if (rgbDiffCount == 0 || itemRgbColor == rgbColor)
-            rgbColor = itemRgbColor;
-        else
-            rgbDiffCount++;
+        if (itemRgbColor.isValid())
+        {
+            if (rgbFound == false)
+            {
+                rgbColor = itemRgbColor;
+                rgbFound = true;
+            }
+            else if (itemRgbColor != rgbColor)
+                rgbDiffCount++;
+        }
 
         quint32 white = fixture->channelNumber(QLCChannel::White, QLCChannel::MSB, headIndex);
         quint32 amber = fixture->channelNumber(QLCChannel::Amber, QLCChannel::MSB, headIndex);
@@ -1425,16 +1410,22 @@ void ContextManager::getCurrentColors(QQuickItem *item) const
         if (UV != QLCChannel::invalid())
             itemWauvColor.setBlue(fixture->channelValueAt(UV));
 
-        if (wauvDiffCount == 0 || itemWauvColor == wauvColor)
-            wauvColor = itemWauvColor;
-        else
-            wauvDiffCount++;
+        if (itemWauvColor.isValid())
+        {
+            if (wauvFound == false)
+            {
+                wauvColor = itemWauvColor;
+                wauvFound = true;
+            }
+            else if (itemWauvColor != wauvColor)
+                wauvDiffCount++;
+        }
     }
 
     QMetaObject::invokeMethod(item, "updateColors",
-                              Q_ARG(QVariant, rgbDiffCount ? false : true),
+                              Q_ARG(QVariant, (rgbFound && rgbDiffCount == 0) ? true : false),
                               Q_ARG(QVariant, rgbColor),
-                              Q_ARG(QVariant, wauvDiffCount ? false : true),
+                              Q_ARG(QVariant, (wauvFound && wauvDiffCount == 0) ? true : false),
                               Q_ARG(QVariant, wauvColor));
 }
 
@@ -1465,52 +1456,32 @@ QVector3D ContextManager::fixturesRotation() const
 
 void ContextManager::setFixturesRotation(QVector3D degrees)
 {
-    if (m_selectedFixtures.count() == 1)
+    // relative rotation change
+    for (quint32 &itemID : m_selectedFixtures)
     {
-        quint32 itemID = m_selectedFixtures.first();
         quint32 fxID = FixtureUtils::itemFixtureID(itemID);
         quint16 headIndex = FixtureUtils::itemHeadIndex(itemID);
         quint16 linkedIndex = FixtureUtils::itemLinkedIndex(itemID);
         QVector3D rotation = m_monProps->fixtureRotation(fxID, headIndex, linkedIndex);
+        QVector3D newRot = rotation + degrees;
 
-        Tardis::instance()->enqueueAction(Tardis::FixtureSetRotation, itemID, QVariant(rotation), QVariant(degrees));
+        // normalize back to a 0-359 range
+        if (newRot.x() < 0) newRot.setX(newRot.x() + 360);
+        else if (newRot.x() >= 360) newRot.setX(newRot.x() - 360);
 
-        // absolute rotation change
-        m_monProps->setFixtureRotation(fxID, headIndex, linkedIndex, degrees);
+        if (newRot.y() < 0) newRot.setY(newRot.y() + 360);
+        else if (newRot.y() >= 360) newRot.setY(newRot.y() - 360);
+
+        if (newRot.z() < 0) newRot.setZ(newRot.z() + 360);
+        else if (newRot.z() >= 360) newRot.setZ(newRot.z() - 360);
+
+        Tardis::instance()->enqueueAction(Tardis::FixtureSetRotation, itemID, QVariant(rotation), QVariant(newRot));
+
+        m_monProps->setFixtureRotation(fxID, headIndex, linkedIndex, newRot);
         if (m_2DView->isEnabled())
-            m_2DView->updateFixtureRotation(itemID, degrees);
+            m_2DView->updateFixtureRotation(itemID, newRot);
         if (m_3DView->isEnabled())
-            m_3DView->updateFixtureRotation(itemID, degrees);
-    }
-    else
-    {
-        // relative rotation change
-        for (quint32 &itemID : m_selectedFixtures)
-        {
-            quint32 fxID = FixtureUtils::itemFixtureID(itemID);
-            quint16 headIndex = FixtureUtils::itemHeadIndex(itemID);
-            quint16 linkedIndex = FixtureUtils::itemLinkedIndex(itemID);
-            QVector3D rotation = m_monProps->fixtureRotation(fxID, headIndex, linkedIndex);
-            QVector3D newRot = rotation + degrees;
-
-            // normalize back to a 0-359 range
-            if (newRot.x() < 0) newRot.setX(newRot.x() + 360);
-            else if (newRot.x() >= 360) newRot.setX(newRot.x() - 360);
-
-            if (newRot.y() < 0) newRot.setY(newRot.y() + 360);
-            else if (newRot.y() >= 360) newRot.setY(newRot.y() - 360);
-
-            if (newRot.z() < 0) newRot.setZ(newRot.z() + 360);
-            else if (newRot.z() >= 360) newRot.setZ(newRot.z() - 360);
-
-            Tardis::instance()->enqueueAction(Tardis::FixtureSetRotation, itemID, QVariant(rotation), QVariant(newRot));
-
-            m_monProps->setFixtureRotation(fxID, headIndex, linkedIndex, newRot);
-            if (m_2DView->isEnabled())
-                m_2DView->updateFixtureRotation(itemID, newRot);
-            if (m_3DView->isEnabled())
-                m_3DView->updateFixtureRotation(itemID, newRot);
-        }
+            m_3DView->updateFixtureRotation(itemID, newRot);
     }
 
     emit fixturesRotationChanged();
