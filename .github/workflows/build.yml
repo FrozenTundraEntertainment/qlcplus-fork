@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-22.04
     name: QLCplus Linux ${{ matrix.task }}
     strategy:
-      #fail-fast: false
+      fail-fast: false
       matrix:
         task: [build-v4, build-v5, coverage-build-v4]
     env:
@@ -41,12 +41,10 @@ jobs:
           echo "TASK=${TASK}" | tee -a $GITHUB_ENV
           echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH}" | tee -a $GITHUB_ENV
 
-          # Select Qt version depending on task
-          if [[ "${{ matrix.task }}" == *"v4"* ]]; then
-            echo "QT_VERSION=6.9.3" | tee -a $GITHUB_ENV
-          else
-            echo "QT_VERSION=6.10.2" | tee -a $GITHUB_ENV
-          fi
+          # Same Qt version for every task. 6.9.3 lacks the Wayland platform
+          # plugin that platforms/linux/CMakeLists.txt installs, which made
+          # "cmake --target install" fail for build-v4.
+          echo "QT_VERSION=6.10.2" | tee -a $GITHUB_ENV
 
       - name: Install System Dependencies
         run: |
