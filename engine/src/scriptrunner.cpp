@@ -68,10 +68,14 @@ void ScriptRunner::execute()
 void ScriptRunner::stop()
 {
     // Flip the flag first: every blocking call in this class checks it to know
-    // when to give up. The exchange also makes sure only one caller tears
-    // things down.
-    if (m_running.exchange(false) == false)
-        return;
+    // when to give up.
+    //
+    // This must not return early when the flag is already false: that is the
+    // case when the script has ended on its own and write() has flushed its
+    // queues, and the Functions it started with stopOnExit(true) still have
+    // to be stopped. Calling stop() more than once is harmless, everything
+    // below only releases what is still left.
+    m_running = false;
 
     // wake up a script that is sleeping in waitTime()
     m_waitCondition.wakeAll();
@@ -385,9 +389,7 @@ void ScriptRunner::run()
         qDebug() << "[ScriptRunner] Code executed";
     }
 
-    // Only this thread uses the engine, so free it as soon as the script is
-    // done. stop() does nothing once the script has ended on its own, so it
-    // would otherwise never be deleted.
+    // Only this thread uses the engine, so free it as soon as the script is done
     {
         QMutexLocker locker(&m_mutex);
         delete m_engine;
